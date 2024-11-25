@@ -1,87 +1,3 @@
-// import {
-//   View,
-//   Text,
-//   FlatList,
-//   TouchableOpacity,
-//   Dimensions,
-// } from "react-native";
-// import React, { useState } from "react";
-// import { Colors } from "../../constants/Colors";
-// import CategoryItem from "./CategoryItem";
-// import { useCategoryList } from "../../hooks/useCategoryList";
-
-// const { width } = Dimensions.get("window");
-// const PADDING_HORIZONTAL = 20;
-// const numColumns = 4;
-// const GRID_SPACING = 16;
-// const GRID_VERTICAL_SPACING = 24;
-// const ITEM_WIDTH =
-//   (width - PADDING_HORIZONTAL * 2 - GRID_SPACING * (numColumns - 1)) /
-//   numColumns;
-
-// export default function Category() {
-//   const { categoryList } = useCategoryList();
-//   const [showAll, setShowAll] = useState(false);
-
-//   const toggleView = () => {
-//     setShowAll(!showAll);
-//   };
-
-//   const initialCategories = categoryList.slice(0, 4);
-
-//   const renderItem = ({ item, index }) => {
-//     // Calculate if item is in last row
-//     const isLastRow =
-//       showAll &&
-//       index >= Math.floor(categoryList.length / numColumns) * numColumns;
-
-//     return (
-//       <View
-//         style={[
-//           styles.item,
-//           showAll
-//             ? {
-//                 width: ITEM_WIDTH,
-//                 marginRight: (index + 1) % numColumns === 0 ? 0 : GRID_SPACING,
-//                 marginBottom: isLastRow ? 0 : GRID_VERTICAL_SPACING,
-//               }
-//             : {
-//                 width: ITEM_WIDTH,
-//                 marginRight: index === 3 ? 0 : GRID_SPACING,
-//               },
-//         ]}
-//       >
-//         <CategoryItem category={item} />
-//       </View>
-//     );
-//   };
-
-//   return (
-//     <View style={styles.container}>
-//       <View style={styles.header}>
-//         <Text style={styles.title}>Category</Text>
-//         <TouchableOpacity onPress={toggleView}>
-//           <Text style={styles.viewAllText}>
-//             {showAll ? "Show Less" : "View All"}
-//           </Text>
-//         </TouchableOpacity>
-//       </View>
-
-//       <FlatList
-//         key={showAll ? "grid" : "list"}
-//         data={showAll ? categoryList : initialCategories}
-//         horizontal={!showAll}
-//         numColumns={showAll ? numColumns : 1}
-//         showsHorizontalScrollIndicator={false}
-//         scrollEnabled={false}
-//         renderItem={renderItem}
-//         keyExtractor={(item) => item.id}
-//         contentContainerStyle={styles.listContainer}
-//       />
-//     </View>
-//   );
-// }
-
 import {
   View,
   Text,
@@ -159,7 +75,7 @@ export default function Category({ onCategorySelect, selectedCategory }) {
         <Text style={styles.title}>Category</Text>
         <TouchableOpacity onPress={toggleView}>
           <Text style={styles.viewAllText}>
-            {showAll ? "Show Less" : "View All"}
+            {showAll ? "Show Less" : "Show More"}
           </Text>
         </TouchableOpacity>
       </View>

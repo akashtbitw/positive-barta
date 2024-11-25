@@ -42,10 +42,8 @@ export default function Explore() {
   const [individualName, setIndividualName] = useState("");
   const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
   const [isDistrictModalVisible, setIsDistrictModalVisible] = useState(false);
-  const [readingTimeNumber, setReadingTimeNumber] = useState("");
 
   // Add validation states
-  const [readingTimeError, setReadingTimeError] = useState("");
   const [titleError, setTitleError] = useState("");
   const [contentError, setContentError] = useState("");
   const [userTypeError, setUserTypeError] = useState("");
@@ -60,6 +58,17 @@ export default function Explore() {
   const [compressionProgress, setCompressionProgress] = useState("");
   const [deleteToken, setDeleteToken] = useState("");
   const { categoryList } = useCategoryList();
+
+  const calculateReadingTime = (text) => {
+    // Average reading speed (words per minute)
+    const wordsPerMinute = 200;
+    // Count words (split by spaces and filter out empty strings)
+    const wordCount = text.trim().split(/\s+/).filter(Boolean).length;
+    // Calculate minutes
+    const minutes = Math.ceil(wordCount / wordsPerMinute);
+    // Return formatted string
+    return `${minutes} mins read`;
+  };
 
   const compressImage = async (uri) => {
     try {
@@ -256,13 +265,6 @@ export default function Explore() {
     setCategoryError("");
     setDistrictError("");
     setContactError("");
-    setReadingTimeError("");
-
-    // Validate reading time
-    if (!readingTimeNumber.trim()) {
-      setReadingTimeError("Reading time is required");
-      isValid = false;
-    }
 
     // Validate title
     if (!title.trim()) {
@@ -320,18 +322,6 @@ export default function Explore() {
     return isValid;
   };
 
-  const handleReadingTimeChange = (text) => {
-    // Only allow numeric input
-    const numericText = text.replace(/[^0-9]/g, "");
-    setReadingTimeNumber(numericText);
-    setReadingTimeError("");
-  };
-
-  const getFormattedReadingTime = () => {
-    if (!readingTimeNumber) return "";
-    return `${readingTimeNumber} mins read`;
-  };
-
   const handlePublish = async () => {
     if (!validateForm()) {
       return;
@@ -341,7 +331,7 @@ export default function Explore() {
       const blogData = {
         title,
         content,
-        readingTime: getFormattedReadingTime(),
+        readingTime: calculateReadingTime(content),
         category: selectedCategory,
         district,
         imageUrl: image || "",
@@ -367,7 +357,6 @@ export default function Explore() {
       // Reset form fields
       setTitle("");
       setContent("");
-      setReadingTimeNumber("");
       setImage(null);
       setFacebookLink("");
       setYoutubeLink("");
@@ -427,31 +416,6 @@ export default function Explore() {
           />
           {contentError ? (
             <Text style={styles.errorText}>{contentError}</Text>
-          ) : null}
-        </View>
-
-        {/* Reading Time Input*/}
-        <View style={styles.inputContainer}>
-          <View
-            style={[
-              styles.readingTimeWrapper,
-              readingTimeError && styles.inputError,
-            ]}
-          >
-            <TextInput
-              style={styles.readingTimeInput}
-              placeholder="Reading Time *"
-              value={readingTimeNumber}
-              onChangeText={handleReadingTimeChange}
-              keyboardType="numeric"
-              placeholderTextColor="#666"
-            />
-            {readingTimeNumber ? (
-              <Text style={styles.readingTimeSuffix}>mins read</Text>
-            ) : null}
-          </View>
-          {readingTimeError ? (
-            <Text style={styles.errorText}>{readingTimeError}</Text>
           ) : null}
         </View>
 
@@ -539,20 +503,22 @@ export default function Explore() {
         </View>
 
         {/* Social Media Links */}
-        <TextInput
-          style={styles.input}
-          placeholder="Enter Facebook Link (Optional)"
-          value={facebookLink}
-          onChangeText={setFacebookLink}
-          placeholderTextColor="#666"
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Enter YouTube Link (Optional)"
-          value={youtubeLink}
-          onChangeText={setYoutubeLink}
-          placeholderTextColor="#666"
-        />
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter Facebook Link (Optional)"
+            value={facebookLink}
+            onChangeText={setFacebookLink}
+            placeholderTextColor="#666"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Enter YouTube Link (Optional)"
+            value={youtubeLink}
+            onChangeText={setYoutubeLink}
+            placeholderTextColor="#666"
+          />
+        </View>
 
         {/* User Type Selection */}
         <View style={styles.userTypeSection}>
@@ -768,7 +734,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F5F5",
     borderRadius: 16,
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 4,
     fontSize: 16,
     borderWidth: 1,
     borderColor: "#E0E0E0",
@@ -779,7 +745,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F5F5",
     borderRadius: 16,
     padding: 20,
-    marginBottom: 16,
+    marginBottom: 4,
     fontSize: 16,
     borderWidth: 1,
     borderColor: "#E0E0E0",
@@ -788,7 +754,7 @@ const styles = StyleSheet.create({
   },
   formattingOptions: {
     flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: 24,
     gap: 12,
   },
   formatButton: {
@@ -818,7 +784,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: "center",
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 4,
     borderWidth: 1,
     borderColor: "#E0E0E0",
   },
@@ -852,13 +818,13 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 240,
     borderRadius: 16,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   userTypeSection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "600",
     marginBottom: 12,
     color: "#1A1A1A",
@@ -866,6 +832,7 @@ const styles = StyleSheet.create({
   userTypeButtons: {
     flexDirection: "row",
     gap: 12,
+    marginBottom: 4,
   },
   userTypeButton: {
     flex: 1,
@@ -890,8 +857,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   dynamicForm: {
-    marginBottom: 16,
-    gap: 12,
+    marginBottom: 24,
+    gap: 4,
   },
   publishButton: {
     height: 56,
@@ -964,7 +931,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   inputContainer: {
-    marginBottom: 10,
+    marginBottom: 24,
   },
   inputError: {
     borderColor: "#ff0000",
@@ -977,11 +944,12 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#ff0000",
     fontSize: 12,
-    marginTop: 5,
+    marginTop: 2,
     marginLeft: 5,
+    marginBottom: 0,
   },
   imageSection: {
-    marginVertical: 10,
+    marginVertical: 24,
   },
   uploadingContainer: {
     flexDirection: "row",
@@ -992,35 +960,5 @@ const styles = StyleSheet.create({
   uploadingText: {
     color: "#666",
     fontSize: 14,
-  },
-  errorText: {
-    color: "red",
-    fontSize: 12,
-    marginTop: 5,
-  },
-  readingTimeWrapper: {
-    height: 56,
-    backgroundColor: "#F5F5F5",
-    borderRadius: 16,
-    paddingHorizontal: 20,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  readingTimeInput: {
-    flex: 1,
-    fontSize: 16,
-    color: "#1A1A1A",
-    height: "100%",
-    paddingRight: 10,
-  },
-  readingTimeSuffix: {
-    fontSize: 16,
-    color: "#666",
-  },
-  inputError: {
-    borderColor: "#ff0000",
-    borderWidth: 1,
   },
 });

@@ -182,9 +182,7 @@ export default function Home() {
             blogs.map((blog) => <BlogCard key={blog.id} blog={blog} />)
           ) : (
             <View style={styles.noResultsContainer}>
-              <Text style={styles.noResultsText}>
-                No blogs found for the selected filters
-              </Text>
+              <Text style={styles.noResultsText}>No blogs found</Text>
             </View>
           )}
         </View>
