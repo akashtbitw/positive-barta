@@ -8,9 +8,11 @@ import {
   TextInput,
   Alert,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
 
 export default function Profile() {
+  const router = useRouter();
   const { signOut } = useAuth();
 
   const handleSignOut = async () => {
@@ -23,6 +25,8 @@ export default function Profile() {
         "There was a problem signing out. Please try again.",
         [{ text: "OK" }]
       );
+    } finally {
+      router.replace("/");
     }
   };
 

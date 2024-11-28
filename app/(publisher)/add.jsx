@@ -23,10 +23,12 @@ import {
 import { ActivityIndicator } from "react-native";
 import { districts } from "../../constants/Districts";
 import { addDoc, collection, Timestamp } from "firebase/firestore";
+import { useUser } from "@clerk/clerk-expo";
 
 const { width, height } = Dimensions.get("window");
 
 export default function Explore() {
+  const { user } = useUser();
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [bold, setBold] = useState(false);
@@ -336,6 +338,7 @@ export default function Explore() {
         district,
         imageUrl: image || "",
         userType,
+        userId: user.id,
         facebookLink: facebookLink || "",
         youtubeLink: youtubeLink || "",
         createdAt: Timestamp.now(),

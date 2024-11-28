@@ -8,9 +8,11 @@ import {
   Switch,
   Alert,
 } from "react-native";
+import { useRouter } from "expo-router";
 import { useAuth } from "@clerk/clerk-expo";
 
 export default function Profile() {
+  const router = useRouter();
   const [darkMode, setDarkMode] = useState(false);
   const { signOut } = useAuth();
 
@@ -33,6 +35,8 @@ export default function Profile() {
         "There was a problem signing out. Please try again.",
         [{ text: "OK" }]
       );
+    } finally {
+      router.replace("/");
     }
   };
 

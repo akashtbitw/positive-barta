@@ -6,20 +6,30 @@ import {
   Animated,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import React, { useRef, useState, useEffect, useCallback } from "react";
-import { collection, query, getDocs, orderBy, where } from "firebase/firestore";
+import {
+  collection,
+  query,
+  getDocs,
+  orderBy,
+  where,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 import { db } from "../../configs/FirebaseConfig";
 import Header from "../../components/Home/Header";
 import Category from "../../components/Home/Category";
 import Location from "../../components/Home/Location";
 import BlogCard from "../../components/Home/BlogCard";
 import { ScrollView } from "react-native";
-import { ArrowUp } from "lucide-react-native";
+import { ArrowUp, Trash2 } from "lucide-react-native";
 import { Colors } from "../../constants/Colors";
 import { useUser } from "@clerk/clerk-expo";
 
 export default function Home() {
+  const { user } = useUser();
   const scrollViewRef = useRef(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -29,11 +39,17 @@ export default function Home() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchBlogs = async () => {
+    if (!user) return;
+
     try {
       // Start with base query conditions
-      const conditions = [where("status", "==", "pending")];
+      const conditions = [
+        // where("status", "==", "pending"),
+        where("userId", "==", user.id),
+      ];
 
       // Add category filter if selected
       if (selectedCategory) {
@@ -45,16 +61,25 @@ export default function Home() {
         conditions.push(where("district", "==", selectedDistrict));
       }
 
+      // Add search query filter if present
+      if (searchQuery) {
+        conditions.push(
+          where("title", ">=", searchQuery),
+          where("title", "<=", searchQuery + "\uf8ff")
+        );
+      }
+
       // Create the query with all conditions
       const blogsQuery = query(
         collection(db, "blogs"),
         ...conditions,
-        orderBy("createdAt", "desc")
+        orderBy("createdAt", "desc"),
+        orderBy("title")
       );
 
       const querySnapshot = await getDocs(blogsQuery);
       const blogsData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
+        docId: doc.id,
         ...doc.data(),
         date: formatDate(doc.data().createdAt),
       }));
@@ -70,14 +95,41 @@ export default function Home() {
     }
   };
 
+  const handleDeleteBlog = async (docId) => {
+    Alert.alert(
+      "Delete Blog",
+      "Are you sure you want to delete this blog?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, "blogs", docId));
+              setBlogs(blogs.filter((blog) => blog.docId !== docId));
+            } catch (error) {
+              console.error("Error deleting blog:", error);
+              Alert.alert("Error", "Failed to delete the blog");
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   useEffect(() => {
     fetchBlogs();
-  }, [selectedCategory, selectedDistrict]); // Refetch when either filter changes
+  }, [user, selectedCategory, selectedDistrict, searchQuery]); // Added searchQuery dependency
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchBlogs();
-  }, [selectedCategory, selectedDistrict]);
+  }, [user, selectedCategory, selectedDistrict, searchQuery]);
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "";
@@ -133,6 +185,35 @@ export default function Home() {
     setSelectedDistrict("");
   };
 
+  const renderBlogCard = (blog) => (
+    <View key={blog.docId} style={styles.blogCardContainer}>
+      <BlogCard blog={blog} />
+      <TouchableOpacity
+        style={styles.deleteButton}
+        onPress={() => handleDeleteBlog(blog.docId)}
+      >
+        <Trash2 size={24} color="red" />
+      </TouchableOpacity>
+      <View
+        style={[
+          styles.statusIndicator,
+          {
+            backgroundColor:
+              blog.status === "pending"
+                ? "rgba(255, 193, 7, 0.8)" // Yellow for pending
+                : blog.status === "accepted"
+                ? "rgba(40, 167, 69, 0.8)" // Green for accepted
+                : "rgba(220, 53, 69, 0.8)", // Red for rejected
+          },
+        ]}
+      >
+        <Text style={styles.statusText}>
+          {blog.status.charAt(0).toUpperCase() + blog.status.slice(1)}
+        </Text>
+      </View>
+    </View>
+  );
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -168,7 +249,7 @@ export default function Home() {
         }
       >
         <View>
-          <Header />
+          <Header onSearch={setSearchQuery} />
           <Category
             onCategorySelect={setSelectedCategory}
             selectedCategory={selectedCategory}
@@ -179,7 +260,7 @@ export default function Home() {
             onReset={handleDistrictReset}
           />
           {blogs.length > 0 ? (
-            blogs.map((blog) => <BlogCard key={blog.id} blog={blog} />)
+            blogs.map(renderBlogCard)
           ) : (
             <View style={styles.noResultsContainer}>
               <Text style={styles.noResultsText}>No blogs found</Text>
@@ -275,5 +356,41 @@ const styles = StyleSheet.create({
     fontFamily: "outfit-medium",
     fontSize: 16,
     color: "#666",
+  },
+  blogCardContainer: {
+    position: "relative",
+    marginBottom: 10,
+  },
+  deleteButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "rgba(255,255,255,0.8)",
+    borderRadius: 20,
+    padding: 5,
+  },
+  statusIndicator: {
+    position: "absolute",
+    bottom: 18, // Increased to move up from bottom edge
+    right: 40, // Increased to move in from right edge
+    borderRadius: 15,
+    padding: 8,
+    minWidth: 80,
+    alignItems: "center",
+    justifyContent: "center",
+    elevation: 3, // Added elevation for Android
+    shadowColor: "#000", // Added shadow for iOS
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  statusText: {
+    color: "white",
+    fontSize: 12,
+    fontFamily: "outfit-medium",
+    textTransform: "capitalize",
   },
 });
