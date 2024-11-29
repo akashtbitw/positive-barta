@@ -42,23 +42,21 @@ export default function BlogDetails() {
     <SafeAreaView style={styles.safeArea}>
       <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
         {/* Blog Image Container */}
-        <View style={styles.imageContainer}>
-          <Image
-            source={
-              blog.imageUrl
-                ? { uri: blog.imageUrl }
-                : require("../../assets/images/placeholder.png")
-            }
-            style={styles.image}
-            resizeMode="contain"
-          />
-          <TouchableOpacity
-            style={styles.expandButton}
-            onPress={() => setIsImageViewerVisible(true)}
-          >
-            <Maximize2 size={24} color={Colors.PRIMARY} />
-          </TouchableOpacity>
-        </View>
+        {blog.imageUrl && (
+          <View style={styles.imageContainer}>
+            <Image
+              source={{ uri: blog.imageUrl }}
+              style={styles.image}
+              resizeMode="contain"
+            />
+            <TouchableOpacity
+              style={styles.expandButton}
+              onPress={() => setIsImageViewerVisible(true)}
+            >
+              <Maximize2 size={24} color={Colors.PRIMARY} />
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Image Viewer Modal */}
         <Modal visible={isImageViewerVisible} transparent={true}>

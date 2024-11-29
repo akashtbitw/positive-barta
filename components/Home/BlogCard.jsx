@@ -2,14 +2,23 @@ import React from "react";
 import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
 import { useRouter } from "expo-router";
 import { Colors } from "../../constants/Colors";
+import { useUser } from "@clerk/clerk-expo";
 
 export default function BlogCard({ blog }) {
+  const { user } = useUser();
   const router = useRouter();
+  let pathName = "/(guest)/blog-details";
+  if (user && !user?.unsafeMetadata?.role) {
+    pathName = "/(publisher)/list/blog-details";
+  }
+  if (user?.unsafeMetadata?.role) {
+    pathName = "";
+  }
 
   const handlePress = () => {
     // Convert the blog object to a string to pass as a parameter
     router.push({
-      pathname: "/(guest)/blog-details",
+      pathname: pathName,
       params: { blog: JSON.stringify(blog) },
     });
   };

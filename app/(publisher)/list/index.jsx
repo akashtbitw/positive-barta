@@ -18,19 +18,21 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
-import { db } from "../../configs/FirebaseConfig";
-import Header from "../../components/Home/Header";
-import Category from "../../components/Home/Category";
-import Location from "../../components/Home/Location";
-import BlogCard from "../../components/Home/BlogCard";
+import { db } from "../../../configs/FirebaseConfig";
+import Header from "../../../components/Home/Header";
+import Category from "../../../components/Home/Category";
+import Location from "../../../components/Home/Location";
+import BlogCard from "../../../components/Home/BlogCard";
 import { ScrollView } from "react-native";
 import { ArrowUp, Trash2 } from "lucide-react-native";
-import { Colors } from "../../constants/Colors";
+import { Colors } from "../../../constants/Colors";
 import { useUser } from "@clerk/clerk-expo";
+import { useFocusEffect } from "expo-router";
 
 export default function Home() {
   const { user } = useUser();
   const scrollViewRef = useRef(null);
+  const isInitialMount = useRef(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [blogs, setBlogs] = useState([]);
@@ -41,8 +43,12 @@ export default function Home() {
   const [selectedDistrict, setSelectedDistrict] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const fetchBlogs = async () => {
+  const fetchBlogs = async (forceFetch = false) => {
     if (!user) return;
+    if (blogs.length > 0 && !forceFetch) {
+      setLoading(false);
+      return;
+    }
 
     try {
       // Start with base query conditions
@@ -95,6 +101,25 @@ export default function Home() {
     }
   };
 
+  // Use useFocusEffect instead of useEffect
+  useFocusEffect(
+    useCallback(() => {
+      if (isInitialMount.current) {
+        // Only fetch on initial mount
+        fetchBlogs(true);
+        isInitialMount.current = false;
+      }
+    }, [user])
+  );
+  useFocusEffect(
+    useCallback(() => {
+      if (!isInitialMount.current) {
+        // Only fetch when filters change and it's not the initial mount
+        fetchBlogs(true);
+      }
+    }, [user, selectedCategory, selectedDistrict, searchQuery])
+  );
+
   const handleDeleteBlog = async (docId) => {
     Alert.alert(
       "Delete Blog",
@@ -122,13 +147,9 @@ export default function Home() {
     );
   };
 
-  useEffect(() => {
-    fetchBlogs();
-  }, [user, selectedCategory, selectedDistrict, searchQuery]); // Added searchQuery dependency
-
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchBlogs();
+    fetchBlogs(true);
   }, [user, selectedCategory, selectedDistrict, searchQuery]);
 
   const formatDate = (timestamp) => {
