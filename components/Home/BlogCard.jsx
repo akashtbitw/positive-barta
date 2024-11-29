@@ -1,22 +1,31 @@
 import React from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  Dimensions,
-} from "react-native";
+import { View, Text, StyleSheet, Image, TouchableOpacity } from "react-native";
+import { useRouter } from "expo-router";
 import { Colors } from "../../constants/Colors";
 
 export default function BlogCard({ blog }) {
+  const router = useRouter();
+
+  const handlePress = () => {
+    // Convert the blog object to a string to pass as a parameter
+    router.push({
+      pathname: "/(guest)/blog-details",
+      params: { blog: JSON.stringify(blog) },
+    });
+  };
+
   return (
-    <TouchableOpacity style={styles.container} activeOpacity={0.9}>
+    <TouchableOpacity
+      style={styles.container}
+      activeOpacity={0.9}
+      onPress={handlePress}
+    >
+      {/* Rest of your existing BlogCard component code remains the same */}
       <Image
         source={
           blog.imageUrl
             ? { uri: blog.imageUrl }
-            : require("../../assets/images/placeholder.png") // Adjust the path based on your file structure
+            : require("../../assets/images/placeholder.png")
         }
         style={styles.image}
         resizeMode="cover"

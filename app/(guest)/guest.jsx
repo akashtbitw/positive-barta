@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   RefreshControl,
 } from "react-native";
-import React, { useRef, useState, useEffect, useCallback } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import { collection, query, getDocs, orderBy, where } from "firebase/firestore";
 import { db } from "../../configs/FirebaseConfig";
 import Header from "../../components/Home/Header";
@@ -17,7 +17,7 @@ import BlogCard from "../../components/Home/BlogCard";
 import { ScrollView } from "react-native";
 import { ArrowUp } from "lucide-react-native";
 import { Colors } from "../../constants/Colors";
-import { useUser } from "@clerk/clerk-expo";
+import { useFocusEffect, Stack } from "expo-router";
 
 export default function Home() {
   const scrollViewRef = useRef(null);
@@ -30,23 +30,26 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const isInitialMount = useRef(true);
 
-  const fetchBlogs = async () => {
+  const fetchBlogs = async (forceFetch = false) => {
+    // If we have data and it's not a forced fetch, don't fetch again
+    if (blogs.length > 0 && !forceFetch) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Start with base query conditions
       const conditions = [where("status", "==", "pending")];
 
-      // Add category filter if selected
       if (selectedCategory) {
         conditions.push(where("category", "==", selectedCategory));
       }
 
-      // Add district filter if selected
       if (selectedDistrict) {
         conditions.push(where("district", "==", selectedDistrict));
       }
 
-      // Add search query filter if present
       if (searchQuery) {
         conditions.push(
           where("title", ">=", searchQuery),
@@ -54,7 +57,6 @@ export default function Home() {
         );
       }
 
-      // Create the query with all conditions
       const blogsQuery = query(
         collection(db, "blogs"),
         ...conditions,
@@ -80,13 +82,30 @@ export default function Home() {
     }
   };
 
-  useEffect(() => {
-    fetchBlogs();
-  }, [selectedCategory, selectedDistrict, searchQuery]); // Refetch when filters or search changes
+  // Use useFocusEffect instead of useEffect
+  useFocusEffect(
+    useCallback(() => {
+      if (isInitialMount.current) {
+        // Only fetch on initial mount
+        fetchBlogs(true);
+        isInitialMount.current = false;
+      }
+    }, [])
+  );
+
+  // Handle filter changes separately
+  useFocusEffect(
+    useCallback(() => {
+      if (!isInitialMount.current) {
+        // Only fetch when filters change and it's not the initial mount
+        fetchBlogs(true);
+      }
+    }, [selectedCategory, selectedDistrict, searchQuery])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchBlogs();
+    fetchBlogs(true); // Force fetch on manual refresh
   }, [selectedCategory, selectedDistrict, searchQuery]);
 
   const formatDate = (timestamp) => {
@@ -143,7 +162,7 @@ export default function Home() {
     setSelectedDistrict("");
   };
 
-  if (loading) {
+  if (loading && blogs.length === 0) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color={Colors.PRIMARY} />
@@ -151,11 +170,14 @@ export default function Home() {
     );
   }
 
-  if (error) {
+  if (error && blogs.length === 0) {
     return (
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={fetchBlogs}>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => fetchBlogs(true)}
+        >
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -221,6 +243,8 @@ export default function Home() {
     </View>
   );
 }
+
+// Styles remain the same
 
 const styles = StyleSheet.create({
   container: {

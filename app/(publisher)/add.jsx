@@ -18,12 +18,12 @@ import * as ImageManipulator from "expo-image-manipulator";
 import {
   CLOUDINARY_URL,
   CLOUDINARY_UPLOAD_PRESET,
-  CLOUDINARY_CLOUD_NAME,
 } from "../../configs/cloudinary";
 import { ActivityIndicator } from "react-native";
 import { districts } from "../../constants/Districts";
 import { addDoc, collection, Timestamp } from "firebase/firestore";
 import { useUser } from "@clerk/clerk-expo";
+import { Ionicons } from "@expo/vector-icons";
 
 const { width, height } = Dimensions.get("window");
 
@@ -55,10 +55,10 @@ export default function Explore() {
   const [contactError, setContactError] = useState("");
 
   //Image upload states
+  const [localImage, setLocalImage] = useState(null); // Stores local image URI
   const [isUploading, setIsUploading] = useState(false);
-  const [imagePublicId, setImagePublicId] = useState("");
   const [compressionProgress, setCompressionProgress] = useState("");
-  const [deleteToken, setDeleteToken] = useState("");
+
   const { categoryList } = useCategoryList();
 
   const calculateReadingTime = (text) => {
@@ -76,20 +76,43 @@ export default function Explore() {
     try {
       setCompressionProgress("Optimizing image...");
 
-      // First, resize the image if it's too large
+      // Get the image information first
+      const imageInfo = await ImageManipulator.manipulateAsync(
+        uri,
+        [], // No operations, just to get info
+        { format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      // Calculate new dimensions maintaining aspect ratio
+      let newWidth = imageInfo.width;
+      let newHeight = imageInfo.height;
+      const maxDimension = 1080;
+
+      if (newWidth > maxDimension || newHeight > maxDimension) {
+        if (newWidth > newHeight) {
+          // Landscape
+          newHeight = (maxDimension * newHeight) / newWidth;
+          newWidth = maxDimension;
+        } else {
+          // Portrait or square
+          newWidth = (maxDimension * newWidth) / newHeight;
+          newHeight = maxDimension;
+        }
+      }
+
+      // First pass: resize while maintaining aspect ratio
       const manipulateResult = await ImageManipulator.manipulateAsync(
         uri,
         [
-          // Resize if larger than 1080px on either dimension
           {
             resize: {
-              width: 1080,
-              height: 1080,
+              width: Math.round(newWidth),
+              height: Math.round(newHeight),
             },
           },
         ],
         {
-          compress: 0.8, // 80% quality
+          compress: 0.8,
           format: ImageManipulator.SaveFormat.JPEG,
         }
       );
@@ -99,13 +122,13 @@ export default function Explore() {
       const blob = await response.blob();
       const fileSizeMB = blob.size / (1024 * 1024);
 
-      // If still too large, compress more
+      // If still too large, compress more while maintaining the same dimensions
       if (fileSizeMB > 1) {
         const additionalCompression = await ImageManipulator.manipulateAsync(
           manipulateResult.uri,
-          [],
+          [], // No resize needed, just compression
           {
-            compress: 0.6, // Further compress if file is still large
+            compress: 0.6,
             format: ImageManipulator.SaveFormat.JPEG,
           }
         );
@@ -122,16 +145,13 @@ export default function Explore() {
     }
   };
 
-  const uploadToCloudinary = async (uri) => {
+  const uploadImageToCloudinary = async (localUri) => {
     try {
       const formData = new FormData();
-      const extension = "jpg"; // We're converting everything to JPEG
-      const type = "image/jpeg";
-
       formData.append("file", {
-        uri,
-        type,
-        name: `upload.${extension}`,
+        uri: localUri,
+        type: "image/jpeg",
+        name: "upload.jpg",
       });
       formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
@@ -148,47 +168,16 @@ export default function Explore() {
       if (data.error) {
         throw new Error(data.error.message);
       }
-      setImage(data.secure_url);
-      setImagePublicId(data.public_id);
-      setDeleteToken(data.delete_token);
+      return data.secure_url;
     } catch (error) {
       console.error("Upload error:", error);
       throw new Error("Failed to upload image");
     }
   };
 
-  const deleteFromCloudinary = async () => {
-    if (!imagePublicId || !deleteToken) return;
-
-    try {
-      const formData = new FormData();
-      formData.append("public_id", imagePublicId);
-      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-      formData.append("token", deleteToken);
-
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/delete_by_token`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      const data = await response.json();
-      if (data.result === "ok") {
-        setImage("");
-        setImagePublicId("");
-        setDeleteToken("");
-      }
-    } catch (error) {
-      console.error("Delete error:", error);
-      throw new Error("Failed to delete image");
-    }
-  };
-
+  // Image picker function
   const pickImage = async () => {
     try {
-      // Request permissions
       const { status } =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== "granted") {
@@ -196,42 +185,23 @@ export default function Explore() {
         return;
       }
 
-      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         quality: 1,
-        aspect: [4, 3],
       });
+
       if (!result.canceled) {
-        setIsUploading(true);
-
-        // Compress image
+        setCompressionProgress("Optimizing image...");
+        // Compress image and store locally
         const compressedUri = await compressImage(result.assets[0].uri);
-
-        // Upload compressed image
-        await uploadToCloudinary(compressedUri);
-
-        setIsUploading(false);
+        setLocalImage(compressedUri);
+        setCompressionProgress("");
       }
     } catch (error) {
       console.error("Image picker error:", error);
-      setIsUploading(false);
+      setCompressionProgress("");
       alert("Failed to process image. Please try again.");
-    }
-  };
-
-  const handleImageChange = async () => {
-    try {
-      if (image) {
-        setIsUploading(true);
-        await deleteFromCloudinary();
-        setIsUploading(false);
-      }
-      await pickImage();
-    } catch (error) {
-      setIsUploading(false);
-      alert("Failed to change image. Please try again.");
     }
   };
 
@@ -330,19 +300,27 @@ export default function Explore() {
     }
 
     try {
+      setIsUploading(true);
+      let imageUrl = "";
+
+      // Only upload to Cloudinary if there's a local image
+      if (localImage) {
+        imageUrl = await uploadImageToCloudinary(localImage);
+      }
+
       const blogData = {
         title,
         content,
         readingTime: calculateReadingTime(content),
         category: selectedCategory,
         district,
-        imageUrl: image || "",
+        imageUrl: imageUrl,
         userType,
         userId: user.id,
         facebookLink: facebookLink || "",
         youtubeLink: youtubeLink || "",
         createdAt: Timestamp.now(),
-        status: "pending", // Default status
+        status: "pending",
         ...(userType === "Organisation"
           ? {
               organisationName,
@@ -357,10 +335,10 @@ export default function Explore() {
       const docRef = await addDoc(collection(db, "blogs"), blogData);
       console.log("Document written with ID: ", docRef.id);
 
-      // Reset form fields
+      // Reset all form fields
       setTitle("");
       setContent("");
-      setImage(null);
+      setLocalImage(null);
       setFacebookLink("");
       setYoutubeLink("");
       setBold(false);
@@ -372,12 +350,48 @@ export default function Explore() {
       setDistrict("");
       setSelectedCategory("");
 
+      setIsUploading(false);
       alert("Post Published Successfully!");
     } catch (error) {
-      console.error("Error adding document: ", error);
+      setIsUploading(false);
+      console.error("Error publishing post: ", error);
       alert("Failed to publish post. Please try again.");
     }
   };
+
+  //Image Preview Section
+  const renderImageSection = () => (
+    <View style={styles.imageSection}>
+      <TouchableOpacity
+        style={styles.imagePicker}
+        onPress={pickImage}
+        disabled={isUploading}
+      >
+        {compressionProgress ? (
+          <View style={styles.uploadingContainer}>
+            <ActivityIndicator size="small" color="#0000ff" />
+            <Text style={styles.uploadingText}>{compressionProgress}</Text>
+          </View>
+        ) : (
+          <Text style={styles.imagePickerText}>
+            {localImage ? "Change Image" : "Add Image"}
+          </Text>
+        )}
+      </TouchableOpacity>
+      {localImage && (
+        <View style={styles.imagePreviewContainer}>
+          <Image source={{ uri: localImage }} style={styles.imagePreview} />
+          <TouchableOpacity
+            style={styles.removeImageButton}
+            onPress={() => setLocalImage(null)}
+            disabled={isUploading}
+          >
+            <Ionicons name="close-circle" size={24} color="#FF0000" />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -481,29 +495,15 @@ export default function Explore() {
         </View>
 
         {/* Image Picker */}
-        <View style={styles.imageSection}>
-          <TouchableOpacity
-            style={styles.imagePicker}
-            onPress={handleImageChange}
-            disabled={isUploading}
-          >
-            {isUploading ? (
-              <View style={styles.uploadingContainer}>
-                <ActivityIndicator size="small" color="#0000ff" />
-                <Text style={styles.uploadingText}>
-                  {compressionProgress || "Uploading..."}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.imagePickerText}>
-                {image ? "Change Image" : "Add Image"}
-              </Text>
-            )}
-          </TouchableOpacity>
-          {image && (
-            <Image source={{ uri: image }} style={styles.imagePreview} />
-          )}
-        </View>
+        {renderImageSection()}
+
+        {/* Add loading overlay when publishing */}
+        {isUploading && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="large" color="#0000ff" />
+            <Text style={styles.uploadingText}>Publishing post...</Text>
+          </View>
+        )}
 
         {/* Social Media Links */}
         <View style={styles.inputContainer}>
@@ -963,5 +963,41 @@ const styles = StyleSheet.create({
   uploadingText: {
     color: "#666",
     fontSize: 14,
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  imageSection: {
+    marginVertical: 24,
+  },
+  imagePreviewContainer: {
+    position: "relative",
+    marginBottom: 24,
+  },
+  imagePreview: {
+    width: "100%",
+    height: 240,
+    borderRadius: 16,
+  },
+  removeImageButton: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    backgroundColor: "white",
+    borderRadius: 20,
+    padding: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
   },
 });
