@@ -11,8 +11,8 @@ export default function BlogCard({ blog }) {
   if (user && !user?.unsafeMetadata?.role) {
     pathName = "/(publisher)/list/blog-details";
   }
-  if (user?.unsafeMetadata?.role) {
-    pathName = "";
+  if (user && user?.unsafeMetadata?.role) {
+    pathName = "/(admin)/bloglist/blog-details";
   }
 
   const handlePress = () => {
@@ -31,11 +31,7 @@ export default function BlogCard({ blog }) {
     >
       {/* Rest of your existing BlogCard component code remains the same */}
       <Image
-        source={
-          blog.imageUrl
-            ? { uri: blog.imageUrl }
-            : require("../../assets/images/placeholder.png")
-        }
+        source={{ uri: blog.imageUrl }}
         style={styles.image}
         resizeMode="cover"
       />
@@ -55,9 +51,7 @@ export default function BlogCard({ blog }) {
           {blog.content}
         </Text>
         <View style={styles.authorContainer}>
-          <Text style={styles.author}>
-            By {blog.individualName || blog.organisationName}
-          </Text>
+          <Text style={styles.author}>By {blog.name}</Text>
         </View>
       </View>
     </TouchableOpacity>

@@ -88,7 +88,7 @@ export default function Category({ onCategorySelect, selectedCategory }) {
         showsHorizontalScrollIndicator={false}
         scrollEnabled={!showAll}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.name}
         contentContainerStyle={styles.listContainer}
       />
     </View>

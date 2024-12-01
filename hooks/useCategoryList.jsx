@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
-import { collection, query, getDocs } from "firebase/firestore";
+import { collection, query, getDocs, orderBy } from "firebase/firestore";
 import { db } from "../configs/FirebaseConfig";
+
 export const useCategoryList = () => {
   const [categoryList, setCategoryList] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -10,7 +11,8 @@ export const useCategoryList = () => {
     setIsLoading(true);
     setCategoryList([]); // Reset the category list
     try {
-      const q = query(collection(db, "categories"));
+      // Add orderBy to sort categories alphabetically by name
+      const q = query(collection(db, "categories"), orderBy("name"));
       const querySnapshot = await getDocs(q);
 
       const categories = [];

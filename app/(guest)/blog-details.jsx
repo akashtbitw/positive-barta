@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -9,40 +9,80 @@ import {
   Linking,
   SafeAreaView,
   Modal,
-  Dimensions,
+  BackHandler,
 } from "react-native";
-import { useLocalSearchParams, useRouter, Stack } from "expo-router";
-import {
-  Facebook,
-  Youtube,
-  Phone,
-  Maximize2,
-  ArrowLeft,
-} from "lucide-react-native";
+import { useLocalSearchParams, Stack } from "expo-router";
+import { Phone, Maximize2, ExternalLink, X } from "lucide-react-native";
 import ImageZoom from "react-native-image-zoom-viewer";
+import WebView from "react-native-webview";
 import { Colors } from "../../constants/Colors";
+import { useFocusEffect } from "@react-navigation/native";
 
 export default function BlogDetails() {
-  const router = useRouter();
   const params = useLocalSearchParams();
   const blog = JSON.parse(params.blog);
   const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
+  const [webViewUrl, setWebViewUrl] = useState("");
+  const [showWebView, setShowWebView] = useState(false);
 
-  const handleSocialLink = async (url) => {
-    if (await Linking.canOpenURL(url)) {
-      await Linking.openURL(url);
-    }
+  const handleExternalLink = (url) => {
+    setWebViewUrl(url);
+    setShowWebView(true);
   };
 
   const handleCall = (phoneNumber) => {
     Linking.openURL(`tel:${phoneNumber}`);
   };
 
+  // Back button handler for WebView
+  useFocusEffect(
+    useCallback(() => {
+      const onBackPress = () => {
+        if (showWebView) {
+          setShowWebView(false);
+          return true;
+        }
+        return false;
+      };
+
+      BackHandler.addEventListener("hardwareBackPress", onBackPress);
+
+      return () =>
+        BackHandler.removeEventListener("hardwareBackPress", onBackPress);
+    }, [showWebView])
+  );
+
+  // Render WebView if active
+  if (showWebView) {
+    return (
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={styles.webViewHeader}>
+          <TouchableOpacity
+            onPress={() => setShowWebView(false)}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
+        </View>
+        <WebView source={{ uri: webViewUrl }} style={{ flex: 1 }} />
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-        {/* Blog Image Container */}
-        {blog.imageUrl && (
+    <>
+      <Stack.Screen
+        options={{
+          animation: "slide_from_right",
+          animationDuration: 250,
+        }}
+      />
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView
+          style={styles.container}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Blog Image Container */}
           <View style={styles.imageContainer}>
             <Image
               source={{ uri: blog.imageUrl }}
@@ -56,98 +96,89 @@ export default function BlogDetails() {
               <Maximize2 size={24} color={Colors.PRIMARY} />
             </TouchableOpacity>
           </View>
-        )}
 
-        {/* Image Viewer Modal */}
-        <Modal visible={isImageViewerVisible} transparent={true}>
-          <ImageZoom
-            imageUrls={[{ url: blog.imageUrl }]}
-            enableSwipeDown
-            onSwipeDown={() => setIsImageViewerVisible(false)}
-            backgroundColor="black"
-            renderHeader={() => (
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setIsImageViewerVisible(false)}
-              >
-                <Text style={{ color: "white", fontSize: 16 }}>Close</Text>
-              </TouchableOpacity>
-            )}
-          />
-        </Modal>
+          {/* Image Viewer Modal */}
+          <Modal visible={isImageViewerVisible} transparent={false}>
+            <ImageZoom
+              imageUrls={[{ url: blog.imageUrl }]}
+              index={0}
+              enableSwipeDown
+              onSwipeDown={() => setIsImageViewerVisible(false)}
+              backgroundColor="white"
+              maxOverflow={0}
+              renderHeader={() => (
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setIsImageViewerVisible(false)}
+                >
+                  <X size={30} color="white" />
+                </TouchableOpacity>
+              )}
+            />
+          </Modal>
 
-        {/* Rest of the content remains the same */}
-        <View style={styles.contentContainer}>
-          {/* Meta Information */}
-          <View style={styles.metaContainer}>
-            <View style={styles.tagContainer}>
-              <Text style={styles.tag}>{blog.category}</Text>
-              <Text style={styles.tag}>{blog.district}</Text>
+          {/* Rest of the content remains the same */}
+          <View style={styles.contentContainer}>
+            {/* Meta Information */}
+            <View style={styles.metaContainer}>
+              <View style={styles.tagContainer}>
+                <Text style={styles.tag}>{blog.category}</Text>
+                <Text style={styles.tag}>{blog.district}</Text>
+              </View>
             </View>
-          </View>
 
-          {/* Title */}
-          <Text style={styles.title}>{blog.title}</Text>
+            {/* Title */}
+            <Text style={styles.title}>{blog.title}</Text>
 
-          {/* Author Information */}
-          <View style={styles.authorSection}>
-            <Text style={styles.authorLabel}>Posted by</Text>
-            <Text style={styles.authorName}>
-              {blog.individualName || blog.organisationName}
-            </Text>
-          </View>
+            {/* Author Information */}
+            <View style={styles.authorSection}>
+              <Text style={styles.authorLabel}>Posted by</Text>
+              <Text style={styles.authorName}>{blog.name}</Text>
+            </View>
 
-          {/* Content */}
-          <Text style={styles.content}>{blog.content}</Text>
+            {/* Content */}
+            <Text style={styles.content}>{blog.content}</Text>
 
-          {/* Published Time */}
-          <View style={styles.publishedTimeContainer}>
-            <Text style={styles.publishedLabel}>Posted on</Text>
-            <Text style={styles.publishedTime}>{blog.date}</Text>
-          </View>
+            {/* Published Time */}
+            <View style={styles.publishedTimeContainer}>
+              <Text style={styles.publishedLabel}>Posted on</Text>
+              <Text style={styles.publishedTime}>{blog.date}</Text>
+            </View>
 
-          {/* Contact and Social Links */}
-          <View style={styles.socialSection}>
-            <Text style={styles.sectionTitle}>Connect with Author</Text>
+            {/* External Links Section */}
+            {(blog.externalLink1 || blog.externalLink2) && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>External Links</Text>
 
-            {/* Phone */}
-            {blog.organisationContact && (
-              <TouchableOpacity
-                style={styles.socialButton}
-                onPress={() => handleCall(blog.organisationContact)}
-              >
-                <Phone size={20} color={Colors.PRIMARY} />
-                <Text style={styles.socialButtonText}>
-                  {blog.organisationContact}
-                </Text>
-              </TouchableOpacity>
-            )}
+                {blog.externalLink1 && (
+                  <TouchableOpacity
+                    style={styles.linkButton}
+                    onPress={() => handleExternalLink(blog.externalLink1)}
+                  >
+                    <ExternalLink size={20} color={Colors.PRIMARY} />
+                    <Text style={styles.linkButtonText}>
+                      {blog.externalLink1}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-            {/* Facebook */}
-            {blog.facebookLink && (
-              <TouchableOpacity
-                style={styles.socialButton}
-                onPress={() => handleSocialLink(blog.facebookLink)}
-              >
-                <Facebook size={20} color={Colors.PRIMARY} />
-                <Text style={styles.socialButtonText}>Facebook Profile</Text>
-              </TouchableOpacity>
-            )}
-
-            {/* YouTube */}
-            {blog.youtubeLink && (
-              <TouchableOpacity
-                style={styles.socialButton}
-                onPress={() => handleSocialLink(blog.youtubeLink)}
-              >
-                <Youtube size={20} color={Colors.PRIMARY} />
-                <Text style={styles.socialButtonText}>YouTube Channel</Text>
-              </TouchableOpacity>
+                {blog.externalLink2 && (
+                  <TouchableOpacity
+                    style={styles.linkButton}
+                    onPress={() => handleExternalLink(blog.externalLink2)}
+                  >
+                    <ExternalLink size={20} color={Colors.PRIMARY} />
+                    <Text style={styles.linkButtonText}>
+                      {blog.externalLink2}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             )}
           </View>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </>
   );
 }
 
@@ -278,5 +309,56 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "outfit-medium",
     color: "#333",
+  },
+  section: {
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+    paddingTop: 20,
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontFamily: "outfit-bold",
+    color: "#333",
+    marginBottom: 15,
+  },
+  linkButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8f8f8",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+  },
+  linkButtonText: {
+    marginLeft: 10,
+    fontSize: 14,
+    fontFamily: "outfit-medium",
+    color: "#333",
+  },
+  webViewHeader: {
+    height: 50,
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+    justifyContent: "center",
+    paddingHorizontal: 10,
+  },
+  backButton: {
+    padding: 10,
+  },
+  backButtonText: {
+    color: Colors.PRIMARY,
+    fontSize: 16,
+    fontFamily: "outfit-medium",
+  },
+  modalCloseButton: {
+    position: "absolute",
+    top: 40,
+    left: 20,
+    zIndex: 1,
+    padding: 8,
+    backgroundColor: Colors.PRIMARY,
+    borderRadius: 20,
   },
 });

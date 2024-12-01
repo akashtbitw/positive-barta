@@ -44,7 +44,8 @@ export default function SignUpScreen() {
       verifyButton: "ইমেল ভেরিফাই করুন",
       emptyFields: "সমস্ত ক্ষেত্র পূরণ করুন",
       invalidEmail: "অবৈধ ইমেল। দয়া করে একটি বৈধ ইমেইল ঠিকানা ব্যবহার করুন",
-      invalidPassword: "পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে",
+      invalidPassword:
+        "পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে এবং একটি বড় হাতের অক্ষর, একটি ছোট হাতের অক্ষর, একটি সংখ্যা এবং একটি বিশেষ অক্ষর থাকতে হবে",
       signupError: "ইমেল ঠিকানা বিদ্যমান নেই",
       invalidCode: "অবৈধ কোড। দয়া করে ৬ সংখ্যার কোড লিখুন",
       verificationFailed: "ভেরিফিকেশন ব্যর্থ হয়েছে। আবার চেষ্টা করুন",
@@ -65,7 +66,8 @@ export default function SignUpScreen() {
       verifyButton: "Verify Email",
       emptyFields: "Please fill in all fields",
       invalidEmail: "Invalid email. Please use a valid email address",
-      invalidPassword: "Password must be at least 8 characters long",
+      invalidPassword:
+        "Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a number, and a special character",
       signupError: "Email address doesn't exist",
       invalidCode: "Invalid code. Please enter 6 digits",
       verificationFailed: "Verification failed. Please try again",
@@ -82,7 +84,23 @@ export default function SignUpScreen() {
   };
 
   const validatePassword = (password) => {
-    return password.length >= 8;
+    // Check for minimum length of 8 characters
+    if (password.length < 8) return false;
+
+    // Check for at least one uppercase letter
+    if (!/[A-Z]/.test(password)) return false;
+
+    // Check for at least one lowercase letter
+    if (!/[a-z]/.test(password)) return false;
+
+    // Check for at least one digit
+    if (!/[0-9]/.test(password)) return false;
+
+    // Check for at least one special character
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) return false;
+
+    // If all checks pass, return true
+    return true;
   };
 
   const validateVerificationCode = (code) => {
@@ -252,9 +270,9 @@ export default function SignUpScreen() {
               onPress={() => setShowPassword(!showPassword)}
             >
               {showPassword ? (
-                <Eye size={20} color="#888" />
-              ) : (
                 <EyeOff size={20} color="#888" />
+              ) : (
+                <Eye size={20} color="#888" />
               )}
             </TouchableOpacity>
           </View>

@@ -9,6 +9,7 @@ import {
   Modal,
   SafeAreaView,
   Dimensions,
+  Alert,
 } from "react-native";
 import React, { useState } from "react";
 import { db } from "../../configs/FirebaseConfig";
@@ -33,15 +34,13 @@ export default function Explore() {
   const [content, setContent] = useState("");
   const [bold, setBold] = useState(false);
   const [italic, setItalic] = useState(false);
-  const [image, setImage] = useState(null);
-  const [facebookLink, setFacebookLink] = useState("");
-  const [youtubeLink, setYoutubeLink] = useState("");
+  const [externalLink1, setExternalLink1] = useState("");
+  const [externalLink2, setExternalLink2] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [district, setDistrict] = useState("");
   const [userType, setUserType] = useState("");
-  const [organisationName, setOrganisationName] = useState("");
-  const [organisationContact, setOrganisationContact] = useState("");
-  const [individualName, setIndividualName] = useState("");
+  const [name, setName] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
   const [isCategoryModalVisible, setIsCategoryModalVisible] = useState(false);
   const [isDistrictModalVisible, setIsDistrictModalVisible] = useState(false);
 
@@ -49,10 +48,11 @@ export default function Explore() {
   const [titleError, setTitleError] = useState("");
   const [contentError, setContentError] = useState("");
   const [userTypeError, setUserTypeError] = useState("");
-  const [formDetailsError, setFormDetailsError] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const [districtError, setDistrictError] = useState("");
+  const [nameError, setNameError] = useState("");
   const [contactError, setContactError] = useState("");
+  const [imageError, setImageError] = useState("");
 
   //Image upload states
   const [localImage, setLocalImage] = useState(null); // Stores local image URI
@@ -197,6 +197,7 @@ export default function Explore() {
         const compressedUri = await compressImage(result.assets[0].uri);
         setLocalImage(compressedUri);
         setCompressionProgress("");
+        setImageError(""); // Clear image error
       }
     } catch (error) {
       console.error("Image picker error:", error);
@@ -213,7 +214,7 @@ export default function Explore() {
   const handleContactChange = (text) => {
     // Only allow numeric input
     const numericText = text.replace(/[^0-9]/g, "");
-    setOrganisationContact(numericText);
+    setContactNumber(numericText);
 
     // Clear error if user is typing
     if (numericText.length > 0) {
@@ -233,10 +234,11 @@ export default function Explore() {
     setTitleError("");
     setContentError("");
     setUserTypeError("");
-    setFormDetailsError("");
     setCategoryError("");
     setDistrictError("");
     setContactError("");
+    setNameError("");
+    setImageError("");
 
     // Validate title
     if (!title.trim()) {
@@ -247,6 +249,12 @@ export default function Explore() {
     // Validate content
     if (!content.trim()) {
       setContentError("Post content is required");
+      isValid = false;
+    }
+
+    // Validate image
+    if (!localImage) {
+      setImageError("Image is required");
       isValid = false;
     }
 
@@ -270,25 +278,18 @@ export default function Explore() {
       isValid = false;
     }
 
-    // Validate organisation/individual details
-    if (userType === "Organisation") {
-      if (!organisationName.trim()) {
-        setFormDetailsError("Organisation name is required");
-        isValid = false;
-      }
+    // Validate name and contact
+    if (!name.trim()) {
+      setNameError("Name is required");
+      isValid = false;
+    }
 
-      if (!organisationContact.trim()) {
-        setContactError("Contact number is required");
-        isValid = false;
-      } else if (!validatePhoneNumber(organisationContact)) {
-        setContactError("Please enter a valid 10-digit phone number");
-        isValid = false;
-      }
-    } else if (userType === "Individual") {
-      if (!individualName.trim()) {
-        setFormDetailsError("Individual name is required");
-        isValid = false;
-      }
+    if (!contactNumber.trim()) {
+      setContactError("Contact number is required");
+      isValid = false;
+    } else if (!validatePhoneNumber(contactNumber)) {
+      setContactError("Please enter a valid 10-digit phone number");
+      isValid = false;
     }
 
     return isValid;
@@ -296,67 +297,95 @@ export default function Explore() {
 
   const handlePublish = async () => {
     if (!validateForm()) {
+      // Determine the most critical missing field to highlight in the alert
+      let missingFields = [];
+
+      if (!title.trim()) missingFields.push("Post Title");
+      if (!content.trim()) missingFields.push("Post Content");
+      if (!localImage) missingFields.push("Image");
+      if (!selectedCategory) missingFields.push("Category");
+      if (!district) missingFields.push("District");
+      if (!userType) missingFields.push("User Type");
+      if (!name.trim()) missingFields.push("Name");
+      if (!contactNumber.trim()) missingFields.push("Contact Number");
+
+      // Show an alert with missing fields
+      Alert.alert(
+        "Incomplete",
+        `Please fill in the following required fields:\n\n• ${missingFields.join(
+          "\n• "
+        )}`,
+        [{ text: "OK" }]
+      );
+
       return;
     }
 
-    try {
-      setIsUploading(true);
-      let imageUrl = "";
+    // Show confirmation alert before publishing
+    Alert.alert(
+      "Confirm Publication",
+      "Are you sure you want to publish this post?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Publish",
+          onPress: async () => {
+            try {
+              setIsUploading(true);
+              let imageUrl = await uploadImageToCloudinary(localImage);
 
-      // Only upload to Cloudinary if there's a local image
-      if (localImage) {
-        imageUrl = await uploadImageToCloudinary(localImage);
-      }
+              const blogData = {
+                title,
+                content,
+                readingTime: calculateReadingTime(content),
+                category: selectedCategory,
+                district,
+                imageUrl,
+                userType,
+                userId: user.id,
+                externalLink1: externalLink1 || "",
+                externalLink2: externalLink2 || "",
+                name,
+                contactNumber,
+                createdAt: Timestamp.now(),
+                status: "pending",
+              };
 
-      const blogData = {
-        title,
-        content,
-        readingTime: calculateReadingTime(content),
-        category: selectedCategory,
-        district,
-        imageUrl: imageUrl,
-        userType,
-        userId: user.id,
-        facebookLink: facebookLink || "",
-        youtubeLink: youtubeLink || "",
-        createdAt: Timestamp.now(),
-        status: "pending",
-        ...(userType === "Organisation"
-          ? {
-              organisationName,
-              organisationContact,
+              // Add document to Firestore
+              await addDoc(collection(db, "blogs"), blogData);
+
+              // Reset all form fields
+              setTitle("");
+              setContent("");
+              setLocalImage(null);
+              setExternalLink1("");
+              setExternalLink2("");
+              setBold(false);
+              setItalic(false);
+              setUserType("");
+              setName("");
+              setContactNumber("");
+              setDistrict("");
+              setSelectedCategory("");
+
+              setIsUploading(false);
+              Alert.alert(
+                "Post Published Successfully!",
+                "Your blog post is now pending admin approval. It will be visible to users once approved. Thank you for your patience!"
+              );
+            } catch (error) {
+              setIsUploading(false);
+              console.error("Error publishing post: ", error);
+              Alert.alert("Error", "Failed to publish post. Please try again.");
             }
-          : {
-              individualName,
-            }),
-      };
-
-      // Add document to Firestore
-      const docRef = await addDoc(collection(db, "blogs"), blogData);
-      console.log("Document written with ID: ", docRef.id);
-
-      // Reset all form fields
-      setTitle("");
-      setContent("");
-      setLocalImage(null);
-      setFacebookLink("");
-      setYoutubeLink("");
-      setBold(false);
-      setItalic(false);
-      setUserType("");
-      setOrganisationName("");
-      setOrganisationContact("");
-      setIndividualName("");
-      setDistrict("");
-      setSelectedCategory("");
-
-      setIsUploading(false);
-      alert("Post Published Successfully!");
-    } catch (error) {
-      setIsUploading(false);
-      console.error("Error publishing post: ", error);
-      alert("Failed to publish post. Please try again.");
-    }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   //Image Preview Section
@@ -369,12 +398,12 @@ export default function Explore() {
       >
         {compressionProgress ? (
           <View style={styles.uploadingContainer}>
-            <ActivityIndicator size="small" color="#0000ff" />
+            <ActivityIndicator size="small" color="#FFFFFF" />
             <Text style={styles.uploadingText}>{compressionProgress}</Text>
           </View>
         ) : (
           <Text style={styles.imagePickerText}>
-            {localImage ? "Change Image" : "Add Image"}
+            {localImage ? "Change Image" : "Add Image *"}
           </Text>
         )}
       </TouchableOpacity>
@@ -390,12 +419,16 @@ export default function Explore() {
           </TouchableOpacity>
         </View>
       )}
+      {imageError ? <Text style={styles.errorText}>{imageError}</Text> : null}
     </View>
   );
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScrollView style={styles.container}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollViewContent}
+      >
         {/* Title Input */}
         <View style={styles.inputContainer}>
           <TextInput
@@ -437,7 +470,7 @@ export default function Explore() {
         </View>
 
         {/* Formatting Options */}
-        <View style={styles.formattingOptions}>
+        {/* <View style={styles.formattingOptions}>
           <TouchableOpacity
             style={[styles.formatButton, bold && styles.activeButton]}
             onPress={() => setBold(!bold)}
@@ -456,7 +489,7 @@ export default function Explore() {
               I
             </Text>
           </TouchableOpacity>
-        </View>
+        </View> */}
 
         {/* Category Selection Button */}
         <View style={styles.inputContainer}>
@@ -497,33 +530,25 @@ export default function Explore() {
         {/* Image Picker */}
         {renderImageSection()}
 
-        {/* Add loading overlay when publishing */}
-        {isUploading && (
-          <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color="#0000ff" />
-            <Text style={styles.uploadingText}>Publishing post...</Text>
-          </View>
-        )}
-
-        {/* Social Media Links */}
+        {/* Add External Links section */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.input}
-            placeholder="Enter Facebook Link (Optional)"
-            value={facebookLink}
-            onChangeText={setFacebookLink}
+            placeholder="External Link 1 (Optional)"
+            value={externalLink1}
+            onChangeText={setExternalLink1}
             placeholderTextColor="#666"
           />
           <TextInput
             style={styles.input}
-            placeholder="Enter YouTube Link (Optional)"
-            value={youtubeLink}
-            onChangeText={setYoutubeLink}
+            placeholder="External Link 2 (Optional)"
+            value={externalLink2}
+            onChangeText={setExternalLink2}
             placeholderTextColor="#666"
           />
         </View>
 
-        {/* User Type Selection */}
+        {/* User Type Toggle */}
         <View style={styles.userTypeSection}>
           <Text style={styles.sectionTitle}>
             Are you an Organisation or Individual? *
@@ -575,53 +600,43 @@ export default function Explore() {
           ) : null}
         </View>
 
-        {/* Dynamic Form */}
-        {userType === "Organisation" && (
-          <View style={styles.dynamicForm}>
+        {/* Name and Contact Fields */}
+        <View style={styles.form}>
+          <TextInput
+            style={[styles.input, nameError && styles.inputError]}
+            placeholder="Enter Your Name *"
+            value={name}
+            onChangeText={(text) => {
+              setName(text);
+              setNameError("");
+            }}
+            placeholderTextColor="#666"
+          />
+          {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
+
+          <View>
             <TextInput
-              style={[styles.input, formDetailsError && styles.inputError]}
-              placeholder="Enter Organisation Name *"
-              value={organisationName}
-              onChangeText={(text) => {
-                setOrganisationName(text);
-                setFormDetailsError("");
-              }}
+              style={[styles.input, contactError && styles.inputError]}
+              placeholder="Enter Contact Number (10 digits) *"
+              value={contactNumber}
+              onChangeText={handleContactChange}
+              keyboardType="numeric"
+              maxLength={10}
               placeholderTextColor="#666"
             />
-            <View>
-              <TextInput
-                style={[styles.input, contactError && styles.inputError]}
-                placeholder="Enter Contact Number (10 digits) *"
-                value={organisationContact}
-                onChangeText={handleContactChange}
-                keyboardType="numeric"
-                maxLength={10}
-                placeholderTextColor="#666"
-              />
-              {contactError ? (
-                <Text style={styles.errorText}>{contactError}</Text>
-              ) : null}
-            </View>
-            {formDetailsError ? (
-              <Text style={styles.errorText}>{formDetailsError}</Text>
+            {contactError ? (
+              <Text style={styles.errorText}>{contactError}</Text>
             ) : null}
           </View>
-        )}
-        {userType === "Individual" && (
-          <View style={styles.dynamicForm}>
-            <TextInput
-              style={[styles.input, formDetailsError && styles.inputError]}
-              placeholder="Enter Your Name *"
-              value={individualName}
-              onChangeText={(text) => {
-                setIndividualName(text);
-                setFormDetailsError("");
-              }}
-              placeholderTextColor="#666"
-            />
-            {formDetailsError ? (
-              <Text style={styles.errorText}>{formDetailsError}</Text>
-            ) : null}
+        </View>
+
+        {/* Loading Overlay Styling */}
+        {isUploading && (
+          <View style={styles.loadingOverlay}>
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FF0000" />
+              <Text style={styles.loadingText}>Publishing Post...</Text>
+            </View>
           </View>
         )}
 
@@ -642,7 +657,7 @@ export default function Explore() {
               <ScrollView>
                 {categoryList.map((category) => (
                   <TouchableOpacity
-                    key={category?.id}
+                    key={category?.name}
                     style={[
                       styles.modalOption,
                       selectedCategory === category?.name &&
@@ -731,6 +746,10 @@ const styles = StyleSheet.create({
   },
   container: {
     padding: 20,
+  },
+
+  scrollViewContent: {
+    paddingBottom: 100, // Adjust this value based on your tab bar height
   },
   input: {
     height: 56,
@@ -859,7 +878,7 @@ const styles = StyleSheet.create({
   selectedUserTypeText: {
     color: "#FFFFFF",
   },
-  dynamicForm: {
+  form: {
     marginBottom: 24,
     gap: 4,
   },
@@ -964,17 +983,6 @@ const styles = StyleSheet.create({
     color: "#666",
     fontSize: 14,
   },
-  loadingOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(255, 255, 255, 0.8)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1000,
-  },
   imageSection: {
     marginVertical: 24,
   },
@@ -999,5 +1007,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
     elevation: 5,
+  },
+  loadingOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(255, 255, 255, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 1000,
+  },
+  loadingContainer: {
+    backgroundColor: "white",
+    borderRadius: 16,
+    padding: 24,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: "#1A1A1A",
+    fontWeight: "600",
   },
 });

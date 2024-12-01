@@ -6,18 +6,28 @@ import {
   Animated,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from "react-native";
 import React, { useRef, useState, useCallback } from "react";
-import { collection, query, getDocs, orderBy, where } from "firebase/firestore";
-import { db } from "../../configs/FirebaseConfig";
-import Header from "../../components/Home/Header";
-import Category from "../../components/Home/Category";
-import Location from "../../components/Home/Location";
-import BlogCard from "../../components/Home/BlogCard";
+import {
+  collection,
+  query,
+  getDocs,
+  orderBy,
+  where,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+import { db } from "../../../configs/FirebaseConfig";
+import Header from "../../../components/Home/Header";
+import Category from "../../../components/Home/Category";
+import Location from "../../../components/Home/Location";
+import BlogCard from "../../../components/Home/BlogCard";
 import { ScrollView } from "react-native";
 import { ArrowUp } from "lucide-react-native";
-import { Colors } from "../../constants/Colors";
+import { Colors } from "../../../constants/Colors";
 import { useFocusEffect, Stack } from "expo-router";
+import { useUser } from "@clerk/clerk-expo";
 
 export default function Home() {
   const scrollViewRef = useRef(null);
@@ -30,8 +40,23 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedDistrict, setSelectedDistrict] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [pendingCount, setPendingCount] = useState(0);
   const isInitialMount = useRef(true);
+  const { user } = useUser();
+  const fetchPendingCount = async () => {
+    try {
+      const conditions = [where("status", "==", "pending")];
+      if (user?.unsafeMetadata?.role !== "Admin") {
+        conditions.push(where("category", "==", user?.unsafeMetadata?.role));
+      }
 
+      const countQuery = query(collection(db, "blogs"), ...conditions);
+      const snapshot = await getDocs(countQuery);
+      setPendingCount(snapshot.size);
+    } catch (err) {
+      console.error("Error fetching pending count:", err);
+    }
+  };
   const fetchBlogs = async (forceFetch = false) => {
     // If we have data and it's not a forced fetch, don't fetch again
     if (blogs.length > 0 && !forceFetch) {
@@ -40,8 +65,10 @@ export default function Home() {
     }
 
     try {
-      const conditions = [where("status", "==", "accepted")];
-
+      const conditions = [where("status", "==", "pending")];
+      if (user?.unsafeMetadata?.role !== "Admin") {
+        conditions.push(where("category", "==", user?.unsafeMetadata?.role));
+      }
       if (selectedCategory) {
         conditions.push(where("category", "==", selectedCategory));
       }
@@ -81,6 +108,44 @@ export default function Home() {
       setRefreshing(false);
     }
   };
+  const handleStatusChange = async (blogId, newStatus) => {
+    const action = newStatus === "accepted" ? "accept" : "reject";
+
+    Alert.alert(
+      "Confirm Action",
+      `Are you sure you want to ${action} this blog?`,
+      [
+        {
+          text: "No",
+          style: "cancel",
+        },
+        {
+          text: "Yes",
+          onPress: async () => {
+            try {
+              const blogRef = doc(db, "blogs", blogId);
+              await updateDoc(blogRef, {
+                status: newStatus,
+              });
+
+              setBlogs(blogs.filter((blog) => blog.id !== blogId));
+              setPendingCount((prev) => prev - 1);
+
+              Alert.alert("Success", `Blog ${newStatus} successfully`, [
+                { text: "OK" },
+              ]);
+            } catch (error) {
+              console.error("Error updating blog status:", error);
+              Alert.alert("Error", "Failed to update blog status", [
+                { text: "OK" },
+              ]);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  };
 
   // Use useFocusEffect instead of useEffect
   useFocusEffect(
@@ -88,6 +153,7 @@ export default function Home() {
       if (isInitialMount.current) {
         // Only fetch on initial mount
         fetchBlogs(true);
+        fetchPendingCount();
         isInitialMount.current = false;
       }
     }, [])
@@ -190,6 +256,7 @@ export default function Home() {
         ref={scrollViewRef}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        contentContainerStyle={styles.scrollViewContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -201,17 +268,44 @@ export default function Home() {
       >
         <View>
           <Header onSearch={setSearchQuery} />
-          <Category
-            onCategorySelect={setSelectedCategory}
-            selectedCategory={selectedCategory}
-          />
+          <View style={styles.pendingCountContainer}>
+            <Text style={styles.pendingCountText}>
+              {user?.unsafeMetadata?.role !== "Admin"
+                ? `Pending ${user?.unsafeMetadata?.role} Blogs: ${pendingCount}`
+                : `Pending Blogs: ${pendingCount}`}
+            </Text>
+          </View>
+          {user?.unsafeMetadata?.role === "Admin" && (
+            <Category
+              onCategorySelect={setSelectedCategory}
+              selectedCategory={selectedCategory}
+            />
+          )}
           <Location
             selectedDistrict={selectedDistrict}
             onDistrictSelect={handleDistrictSelect}
             onReset={handleDistrictReset}
           />
           {blogs.length > 0 ? (
-            blogs.map((blog) => <BlogCard key={blog.id} blog={blog} />)
+            blogs.map((blog) => (
+              <View key={blog.id} style={styles.blogCardContainer}>
+                <BlogCard blog={blog} />
+                <View style={styles.actionButtonsContainer}>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.acceptButton]}
+                    onPress={() => handleStatusChange(blog.id, "accepted")}
+                  >
+                    <Text style={styles.actionButtonText}>Accept</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.actionButton, styles.rejectButton]}
+                    onPress={() => handleStatusChange(blog.id, "rejected")}
+                  >
+                    <Text style={styles.actionButtonText}>Reject</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
           ) : (
             <View style={styles.noResultsContainer}>
               <Text style={styles.noResultsText}>No blogs found</Text>
@@ -251,6 +345,9 @@ const styles = StyleSheet.create({
     flex: 1,
     position: "relative",
   },
+  scrollViewContent: {
+    paddingBottom: 100, // Adjust this value based on your tab bar height
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -282,7 +379,7 @@ const styles = StyleSheet.create({
   },
   scrollToTopButton: {
     position: "absolute",
-    bottom: 20,
+    bottom: 75,
     right: 20,
     backgroundColor: Colors.PRIMARY,
     borderRadius: 30,
@@ -309,5 +406,62 @@ const styles = StyleSheet.create({
     fontFamily: "outfit-medium",
     fontSize: 16,
     color: "#666",
+  },
+  blogCardContainer: {
+    position: "relative",
+    marginBottom: 10,
+  },
+  actionButtonsContainer: {
+    position: "absolute",
+    bottom: 16,
+    right: 40,
+    flexDirection: "row",
+    gap: 8,
+  },
+  actionButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    elevation: 3,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  acceptButton: {
+    backgroundColor: "rgba(40, 167, 69, 0.9)", // Green with some transparency
+  },
+  rejectButton: {
+    backgroundColor: "rgba(220, 53, 69, 0.9)", // Red with some transparency
+  },
+  actionButtonText: {
+    color: "white",
+    fontSize: 12,
+    fontFamily: "outfit-medium",
+    textTransform: "uppercase",
+  },
+  pendingCountContainer: {
+    padding: 15,
+    backgroundColor: Colors.PRIMARY,
+    marginHorizontal: 15,
+    marginVertical: 10,
+    borderRadius: 10,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  pendingCountText: {
+    color: "white",
+    fontSize: 16,
+    fontFamily: "outfit-medium",
+    textAlign: "center",
   },
 });

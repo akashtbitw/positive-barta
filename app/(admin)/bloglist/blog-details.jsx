@@ -177,7 +177,7 @@ export default function BlogDetails() {
             )}
 
             {/* Contact Details Section */}
-            {/* <View style={styles.section}>
+            <View style={styles.section}>
               <Text style={styles.sectionTitle}>{blog.userType} Details</Text>
               <TouchableOpacity
                 style={styles.linkButton}
@@ -186,7 +186,7 @@ export default function BlogDetails() {
                 <Phone size={20} color={Colors.PRIMARY} />
                 <Text style={styles.linkButtonText}>{blog.contactNumber}</Text>
               </TouchableOpacity>
-            </View> */}
+            </View>
           </View>
         </ScrollView>
       </SafeAreaView>

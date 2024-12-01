@@ -136,6 +136,10 @@ export default function Home() {
             try {
               await deleteDoc(doc(db, "blogs", docId));
               setBlogs(blogs.filter((blog) => blog.docId !== docId));
+              // Show success message
+              Alert.alert("Success", "Blog deleted successfully", [
+                { text: "OK" },
+              ]);
             } catch (error) {
               console.error("Error deleting blog:", error);
               Alert.alert("Error", "Failed to delete the blog");
@@ -260,6 +264,7 @@ export default function Home() {
         ref={scrollViewRef}
         onScroll={handleScroll}
         scrollEventThrottle={16}
+        contentContainerStyle={styles.scrollViewContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -319,6 +324,9 @@ const styles = StyleSheet.create({
     flex: 1,
     position: "relative",
   },
+  scrollViewContent: {
+    paddingBottom: 100, // Adjust this value based on your tab bar height
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -350,7 +358,7 @@ const styles = StyleSheet.create({
   },
   scrollToTopButton: {
     position: "absolute",
-    bottom: 20,
+    bottom: 75,
     right: 20,
     backgroundColor: Colors.PRIMARY,
     borderRadius: 30,
@@ -392,7 +400,7 @@ const styles = StyleSheet.create({
   },
   statusIndicator: {
     position: "absolute",
-    bottom: 18, // Increased to move up from bottom edge
+    bottom: 16, // Increased to move up from bottom edge
     right: 40, // Increased to move in from right edge
     borderRadius: 15,
     padding: 8,

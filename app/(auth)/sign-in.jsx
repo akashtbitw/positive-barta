@@ -160,9 +160,9 @@ export default function Page() {
             onPress={() => setShowPassword(!showPassword)}
           >
             {showPassword ? (
-              <Eye size={20} color="#888" />
-            ) : (
               <EyeOff size={20} color="#888" />
+            ) : (
+              <Eye size={20} color="#888" />
             )}
           </TouchableOpacity>
         </View>
