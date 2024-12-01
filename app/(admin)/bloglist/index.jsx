@@ -17,6 +17,8 @@ import {
   where,
   doc,
   updateDoc,
+  limit,
+  startAfter,
 } from "firebase/firestore";
 import { db } from "../../../configs/FirebaseConfig";
 import Header from "../../../components/Home/Header";
@@ -26,7 +28,7 @@ import BlogCard from "../../../components/Home/BlogCard";
 import { ScrollView } from "react-native";
 import { ArrowUp } from "lucide-react-native";
 import { Colors } from "../../../constants/Colors";
-import { useFocusEffect, Stack } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { useUser } from "@clerk/clerk-expo";
 
 export default function Home() {
@@ -35,6 +37,7 @@ export default function Home() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const [blogs, setBlogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -42,7 +45,45 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
   const isInitialMount = useRef(true);
+  const lastDoc = useRef(null);
+  const hasMore = useRef(true);
+  const BLOGS_PER_PAGE = 10;
   const { user } = useUser();
+
+  const createBlogsQuery = (lastDocument = null) => {
+    const conditions = [where("status", "==", "pending")];
+
+    if (user?.unsafeMetadata?.role !== "Admin") {
+      conditions.push(where("category", "==", user?.unsafeMetadata?.role));
+    }
+    if (selectedCategory) {
+      conditions.push(where("category", "==", selectedCategory));
+    }
+    if (selectedDistrict) {
+      conditions.push(where("district", "==", selectedDistrict));
+    }
+    if (searchQuery) {
+      conditions.push(
+        where("title", ">=", searchQuery),
+        where("title", "<=", searchQuery + "\uf8ff")
+      );
+    }
+
+    let baseQuery = query(
+      collection(db, "blogs"),
+      ...conditions,
+      orderBy("createdAt", "desc"),
+      orderBy("title"),
+      limit(BLOGS_PER_PAGE)
+    );
+
+    if (lastDocument) {
+      baseQuery = query(baseQuery, startAfter(lastDocument));
+    }
+
+    return baseQuery;
+  };
+
   const fetchPendingCount = async () => {
     try {
       const conditions = [where("status", "==", "pending")];
@@ -57,41 +98,22 @@ export default function Home() {
       console.error("Error fetching pending count:", err);
     }
   };
+
   const fetchBlogs = async (forceFetch = false) => {
-    // If we have data and it's not a forced fetch, don't fetch again
     if (blogs.length > 0 && !forceFetch) {
       setLoading(false);
       return;
     }
 
     try {
-      const conditions = [where("status", "==", "pending")];
-      if (user?.unsafeMetadata?.role !== "Admin") {
-        conditions.push(where("category", "==", user?.unsafeMetadata?.role));
-      }
-      if (selectedCategory) {
-        conditions.push(where("category", "==", selectedCategory));
-      }
-
-      if (selectedDistrict) {
-        conditions.push(where("district", "==", selectedDistrict));
-      }
-
-      if (searchQuery) {
-        conditions.push(
-          where("title", ">=", searchQuery),
-          where("title", "<=", searchQuery + "\uf8ff")
-        );
-      }
-
-      const blogsQuery = query(
-        collection(db, "blogs"),
-        ...conditions,
-        orderBy("createdAt", "desc"),
-        orderBy("title")
-      );
-
+      setLoading(true);
+      const blogsQuery = createBlogsQuery();
       const querySnapshot = await getDocs(blogsQuery);
+
+      hasMore.current = querySnapshot.docs.length === BLOGS_PER_PAGE;
+      lastDoc.current =
+        querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+
       const blogsData = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -108,6 +130,34 @@ export default function Home() {
       setRefreshing(false);
     }
   };
+
+  const loadMoreBlogs = async () => {
+    if (loadingMore || !hasMore.current || !lastDoc.current) return;
+
+    try {
+      setLoadingMore(true);
+      const blogsQuery = createBlogsQuery(lastDoc.current);
+      const querySnapshot = await getDocs(blogsQuery);
+
+      hasMore.current = querySnapshot.docs.length === BLOGS_PER_PAGE;
+      lastDoc.current =
+        querySnapshot.docs[querySnapshot.docs.length - 1] || null;
+
+      const newBlogsData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        date: formatDate(doc.data().createdAt),
+      }));
+
+      setBlogs((prevBlogs) => [...prevBlogs, ...newBlogsData]);
+    } catch (err) {
+      console.error("Error loading more blogs:", err);
+      setError("Failed to load more blogs");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
   const handleStatusChange = async (blogId, newStatus) => {
     const action = newStatus === "accepted" ? "accept" : "reject";
 
@@ -147,11 +197,16 @@ export default function Home() {
     );
   };
 
-  // Use useFocusEffect instead of useEffect
+  const handleFilterChange = useCallback(() => {
+    lastDoc.current = null;
+    hasMore.current = true;
+    setBlogs([]);
+    fetchBlogs(true);
+  }, [selectedCategory, selectedDistrict, searchQuery]);
+
   useFocusEffect(
     useCallback(() => {
       if (isInitialMount.current) {
-        // Only fetch on initial mount
         fetchBlogs(true);
         fetchPendingCount();
         isInitialMount.current = false;
@@ -159,43 +214,37 @@ export default function Home() {
     }, [])
   );
 
-  // Handle filter changes separately
-  useFocusEffect(
-    useCallback(() => {
-      if (!isInitialMount.current) {
-        // Only fetch when filters change and it's not the initial mount
-        fetchBlogs(true);
-      }
-    }, [selectedCategory, selectedDistrict, searchQuery])
-  );
+  React.useEffect(() => {
+    if (!isInitialMount.current) {
+      handleFilterChange();
+    }
+  }, [selectedCategory, selectedDistrict, searchQuery]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    fetchBlogs(true); // Force fetch on manual refresh
+    hasMore.current = true;
+    lastDoc.current = null;
+    fetchBlogs(true);
   }, [selectedCategory, selectedDistrict, searchQuery]);
 
   const formatDate = (timestamp) => {
     if (!timestamp) return "";
     const date = timestamp.toDate();
-
     const time = date.toLocaleTimeString("en-US", {
       hour: "2-digit",
       minute: "2-digit",
       hour12: true,
     });
-
     const dateStr = date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
-
     return `${time} • ${dateStr}`;
   };
 
   const handleScroll = (event) => {
     const scrollPosition = event.nativeEvent.contentOffset.y;
-
     if (scrollPosition > 200 && !showScrollButton) {
       setShowScrollButton(true);
       Animated.timing(fadeAnim, {
@@ -228,27 +277,74 @@ export default function Home() {
     setSelectedDistrict("");
   };
 
-  if (loading && blogs.length === 0) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={Colors.PRIMARY} />
-      </View>
-    );
-  }
+  const renderContent = () => {
+    if (loading && blogs.length === 0) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={Colors.PRIMARY} />
+        </View>
+      );
+    }
 
-  if (error && blogs.length === 0) {
+    if (error && blogs.length === 0) {
+      return (
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => fetchBlogs(true)}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (blogs.length === 0 && !loading) {
+      return (
+        <View style={styles.noResultsContainer}>
+          <Text style={styles.noResultsText}>No blogs found</Text>
+        </View>
+      );
+    }
+
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => fetchBlogs(true)}
-        >
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
+      <>
+        {blogs.map((blog) => (
+          <View key={blog.id} style={styles.blogCardContainer}>
+            <BlogCard blog={blog} />
+            <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.acceptButton]}
+                onPress={() => handleStatusChange(blog.id, "accepted")}
+              >
+                <Text style={styles.actionButtonText}>Accept</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionButton, styles.rejectButton]}
+                onPress={() => handleStatusChange(blog.id, "rejected")}
+              >
+                <Text style={styles.actionButtonText}>Reject</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+        {hasMore.current && (
+          <TouchableOpacity
+            style={styles.loadMoreButton}
+            onPress={loadMoreBlogs}
+            disabled={loadingMore}
+          >
+            {loadingMore ? (
+              <ActivityIndicator color="white" size="small" />
+            ) : (
+              <Text style={styles.loadMoreButtonText}>Load More</Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </>
     );
-  }
+  };
 
   return (
     <View style={styles.container}>
@@ -286,31 +382,7 @@ export default function Home() {
             onDistrictSelect={handleDistrictSelect}
             onReset={handleDistrictReset}
           />
-          {blogs.length > 0 ? (
-            blogs.map((blog) => (
-              <View key={blog.id} style={styles.blogCardContainer}>
-                <BlogCard blog={blog} />
-                <View style={styles.actionButtonsContainer}>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.acceptButton]}
-                    onPress={() => handleStatusChange(blog.id, "accepted")}
-                  >
-                    <Text style={styles.actionButtonText}>Accept</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.actionButton, styles.rejectButton]}
-                    onPress={() => handleStatusChange(blog.id, "rejected")}
-                  >
-                    <Text style={styles.actionButtonText}>Reject</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ))
-          ) : (
-            <View style={styles.noResultsContainer}>
-              <Text style={styles.noResultsText}>No blogs found</Text>
-            </View>
-          )}
+          {renderContent()}
         </View>
       </ScrollView>
 
@@ -463,5 +535,18 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: "outfit-medium",
     textAlign: "center",
+  },
+  loadMoreButton: {
+    backgroundColor: Colors.PRIMARY,
+    padding: 12,
+    borderRadius: 8,
+    marginHorizontal: 20,
+    marginVertical: 16,
+    alignItems: "center",
+  },
+  loadMoreButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontFamily: "outfit-medium",
   },
 });
